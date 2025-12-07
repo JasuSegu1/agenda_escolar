@@ -1,16 +1,20 @@
+// db.js
 const mysql = require('mysql2');
-require('dotenv').config();
+require('dotenv').config(); // En Railway no es obligatorio, pero en local sí te ayuda
 
+// Creamos un pool de conexiones a MySQL
 const pool = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
+    host: process.env.DB_HOST,        // mysql.railway.internal
+    user: process.env.DB_USER,        // root
     password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 3306, // ← Railway usa 3306 interno
+    database: process.env.DB_NAME,    // railway
+    port: process.env.DB_PORT || 3306, // ⚠️ Usa DB_PORT, NO PORT del servidor
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
 });
 
+// Convertimos el pool a promesas para usar async/await
 const db = pool.promise();
+
 module.exports = db;
