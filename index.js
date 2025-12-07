@@ -4,12 +4,86 @@ const bodyParser = require('body-parser');
 const db = require('./db');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // Importante para Railway
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// --- LOGIN ---
+// --- FUNCIÓN MÁGICA: Crear Tablas Automáticamente ---
+async function inicializarBD() {
+    try {
+        console.log("Iniciando creación de tablas...");
+
+        // 1. Tabla Usuarios
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nombre VARCHAR(100) NOT NULL,
+                email VARCHAR(100) NOT NULL UNIQUE,
+                password VARCHAR(100) NOT NULL,
+                rol ENUM('estudiante', 'docente') DEFAULT 'estudiante'
+            )
+        `);
+
+        // 2. Tabla Tareas
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS tareas (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                usuario_id INT,
+                titulo VARCHAR(100) NOT NULL,
+                descripcion TEXT,
+                fecha DATE NOT NULL,
+                tipo ENUM('personal', 'grupal') DEFAULT 'personal',
+                estatus ENUM('pendiente', 'completada') DEFAULT 'pendiente',
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+            )
+        `);
+
+        // 3. Tabla Notas
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS notas (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                usuario_id INT,
+                titulo VARCHAR(100),
+                contenido TEXT,
+                color_fondo VARCHAR(20),
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+            )
+        `);
+
+        // 4. Tabla Recordatorios
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS recordatorios (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                usuario_id INT,
+                mensaje VARCHAR(255),
+                fecha_hora DATETIME,
+                FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+            )
+        `);
+
+        // 5. Insertar Usuarios de Prueba (Si no existen)
+        // Usamos INSERT IGNORE para que no de error si ya existen
+        await db.query(`
+            INSERT IGNORE INTO usuarios (id, nombre, email, password, rol) VALUES 
+            (1, 'Profesor Demo', 'profesor@demo.com', '123456', 'docente'),
+            (2, 'Alumno Prueba', 'alumno@demo.com', '123456', 'estudiante');
+        `);
+
+        console.log("¡Tablas verificadas/creadas correctamente!");
+    } catch (error) {
+        console.error("Error al inicializar la BD:", error);
+    }
+}
+
+// Ejecutamos la creación de tablas
+inicializarBD();
+// ----------------------------------------------------
+
+// --- RUTAS DE LA API ---
+
+// Login
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
     try {
@@ -23,7 +97,7 @@ app.post('/api/login', async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Server error' }); }
 });
 
-// --- TAREAS ---
+// Tareas
 app.get('/api/tareas', async (req, res) => {
     const { userId, userRol } = req.query;
     try {
@@ -51,8 +125,8 @@ app.put('/api/tareas/:id', async (req, res) => {
     const { titulo, descripcion, fecha, tipo, estatus } = req.body;
     try {
         if (estatus !== undefined && !titulo) {
-            await db.query('UPDATE tareas SET estatus = ? WHERE id = ?', [estatus, id]);
-            return res.json({ message: 'Estatus actualizado' });
+             await db.query('UPDATE tareas SET estatus = ? WHERE id = ?', [estatus, id]);
+             return res.json({ message: 'Estatus actualizado' });
         }
         await db.query(
             'UPDATE tareas SET titulo = ?, descripcion = ?, fecha = ?, tipo = ? WHERE id = ?',
@@ -67,7 +141,7 @@ app.delete('/api/tareas/:id', async (req, res) => {
     res.json({ message: 'Eliminada' });
 });
 
-// --- NOTAS (CRUD COMPLETO) ---
+// Notas
 app.get('/api/notas', async (req, res) => {
     const { userId } = req.query;
     try {
@@ -87,12 +161,11 @@ app.post('/api/notas', async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Error' }); }
 });
 
-// NUEVO: Editar Nota
 app.put('/api/notas/:id', async (req, res) => {
     const { titulo, contenido, color_fondo } = req.body;
     try {
-        await db.query('UPDATE notas SET titulo = ?, contenido = ?, color_fondo = ? WHERE id = ?',
-            [titulo, contenido, color_fondo, req.params.id]);
+        await db.query('UPDATE notas SET titulo = ?, contenido = ?, color_fondo = ? WHERE id = ?', 
+        [titulo, contenido, color_fondo, req.params.id]);
         res.json({ message: 'Nota actualizada' });
     } catch (error) { res.status(500).json({ error: 'Error actualizando nota' }); }
 });
@@ -102,7 +175,7 @@ app.delete('/api/notas/:id', async (req, res) => {
     res.json({ message: 'Nota eliminada' });
 });
 
-// --- RECORDATORIOS (CRUD COMPLETO) ---
+// Recordatorios
 app.get('/api/recordatorios', async (req, res) => {
     const { userId } = req.query;
     try {
@@ -122,12 +195,11 @@ app.post('/api/recordatorios', async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Error' }); }
 });
 
-// NUEVO: Editar Recordatorio
 app.put('/api/recordatorios/:id', async (req, res) => {
     const { mensaje, fecha_hora } = req.body;
     try {
-        await db.query('UPDATE recordatorios SET mensaje = ?, fecha_hora = ? WHERE id = ?',
-            [mensaje, fecha_hora, req.params.id]);
+        await db.query('UPDATE recordatorios SET mensaje = ?, fecha_hora = ? WHERE id = ?', 
+        [mensaje, fecha_hora, req.params.id]);
         res.json({ message: 'Recordatorio actualizado' });
     } catch (error) { res.status(500).json({ error: 'Error actualizando recordatorio' }); }
 });
@@ -137,4 +209,4 @@ app.delete('/api/recordatorios/:id', async (req, res) => {
     res.json({ message: 'Recordatorio eliminado' });
 });
 
-app.listen(PORT, () => console.log(`Servidor listo en http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Servidor listo en puerto ${PORT}`));
